@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Copilot Visualizer</title>
+        <style>
+            :root {
+                color-scheme: dark;
+            }
+            html,
+            body {
+                margin: 0;
+                height: 100%;
+                overflow: hidden;
+                background: var(--background-color-default, #07080d);
+                color: var(--text-color-default, #e6edf3);
+                font-family: var(
+                    --font-sans,
+                    -apple-system,
+                    BlinkMacSystemFont,
+                    "Segoe UI",
+                    sans-serif
+                );
+            }
+            #stage {
+                position: fixed;
+                inset: 0;
+                display: block;
+            }
+            #hud {
+                position: fixed;
+                left: 16px;
+                top: 14px;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                pointer-events: none;
+                text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
+            }
+            #activity {
+                font-size: var(--text-title-large, 22px);
+                font-weight: var(--font-weight-semibold, 600);
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+            }
+            #tool {
+                font-family: var(--font-mono, "SFMono-Regular", Consolas, monospace);
+                font-size: var(--text-code-inline, 12px);
+                color: var(--text-color-muted, #9aa4b2);
+                min-height: 14px;
+            }
+            #controls {
+                position: fixed;
+                right: 14px;
+                bottom: 14px;
+                display: flex;
+                gap: 8px;
+                opacity: 0.32;
+                transition: opacity 0.2s ease;
+            }
+            #controls:hover {
+                opacity: 1;
+            }
+            #controls button {
+                font-family: var(--font-sans, sans-serif);
+                font-size: 12px;
+                padding: 5px 10px;
+                border-radius: 7px;
+                border: 1px solid var(--border-color-default, #30363d);
+                background: var(--background-color-default, rgba(20, 22, 30, 0.85));
+                color: var(--text-color-default, #e6edf3);
+                cursor: pointer;
+            }
+            #controls button:hover {
+                border-color: var(--color-focus-outline, #58a6ff);
+            }
+            /* Settings -------------------------------------------------------- */
+            #gear {
+                position: fixed;
+                right: 14px;
+                top: 14px;
+                width: 34px;
+                height: 34px;
+                display: grid;
+                place-items: center;
+                border-radius: 9px;
+                border: 1px solid var(--border-color-default, #30363d);
+                background: var(--background-color-default, rgba(20, 22, 30, 0.7));
+                color: var(--text-color-default, #e6edf3);
+                cursor: pointer;
+                opacity: 0.32;
+                transition:
+                    opacity 0.2s ease,
+                    transform 0.4s ease,
+                    border-color 0.2s ease;
+                font-size: 17px;
+                line-height: 1;
+            }
+            #gear:hover {
+                opacity: 1;
+                border-color: var(--color-focus-outline, #58a6ff);
+            }
+            #gear.open {
+                opacity: 1;
+                transform: rotate(60deg);
+            }
+            #settings {
+                position: fixed;
+                right: 14px;
+                top: 56px;
+                width: 248px;
+                padding: 14px 16px 16px;
+                border-radius: 12px;
+                border: 1px solid var(--border-color-default, #30363d);
+                background: var(--background-color-default, rgba(14, 16, 22, 0.92));
+                backdrop-filter: blur(8px);
+                box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+                display: none;
+                flex-direction: column;
+                gap: 13px;
+                z-index: 5;
+            }
+            #settings.open {
+                display: flex;
+            }
+            #settings h2 {
+                margin: 0 0 2px;
+                font-size: var(--text-body-medium, 13px);
+                font-weight: var(--font-weight-semibold, 600);
+                letter-spacing: 0.05em;
+                text-transform: uppercase;
+                color: var(--text-color-muted, #9aa4b2);
+            }
+            .row {
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+            }
+            .row .label {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                font-size: 12px;
+                color: var(--text-color-default, #e6edf3);
+            }
+            .row .label .val {
+                font-family: var(--font-mono, Consolas, monospace);
+                font-size: 11px;
+                color: var(--text-color-muted, #9aa4b2);
+            }
+            .row .label .numval {
+                width: 54px;
+                padding: 2px 4px;
+                text-align: right;
+                font-family: var(--font-mono, Consolas, monospace);
+                font-size: 11px;
+                color: var(--text-color-default, #e6edf3);
+                background: var(--background-color-default, #0d1117);
+                border: 1px solid var(--border-color-default, #30363d);
+                border-radius: 4px;
+            }
+            .row .label .numval:focus {
+                outline: none;
+                border-color: var(--color-focus-outline, #58a6ff);
+            }
+            .row .label .numval.invalid {
+                border-color: var(--true-color-red, #f85149);
+            }
+            /* Hide the native spinner buttons for a cleaner look. */
+            .row .label .numval::-webkit-outer-spin-button,
+            .row .label .numval::-webkit-inner-spin-button {
+                -webkit-appearance: none;
+                margin: 0;
+            }
+            .row .label .numval {
+                -moz-appearance: textfield;
+            }
+            .row.toggle {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .row.toggle label {
+                font-size: 12px;
+            }
+            input[type="range"] {
+                width: 100%;
+                accent-color: var(--color-focus-outline, #58a6ff);
+                cursor: pointer;
+            }
+            input[type="checkbox"] {
+                accent-color: var(--color-focus-outline, #58a6ff);
+                width: 15px;
+                height: 15px;
+                cursor: pointer;
+            }
+            select {
+                font-family: var(--font-sans, sans-serif);
+                font-size: 12px;
+                padding: 4px 6px;
+                border-radius: 7px;
+                border: 1px solid var(--border-color-default, #30363d);
+                background: var(--background-color-default, rgba(20, 22, 30, 0.85));
+                color: var(--text-color-default, #e6edf3);
+                cursor: pointer;
+            }
+            .hue-row .label {
+                gap: 8px;
+            }
+            #swatch {
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                border: 1px solid rgba(255, 255, 255, 0.25);
+                flex: 0 0 auto;
+            }
+            /* Color picker --------------------------------------------------- */
+            #wheel {
+                display: block;
+                margin: 2px auto 0;
+                cursor: crosshair;
+                border-radius: 8px;
+                touch-action: none;
+            }
+            .subhead {
+                font-size: 11px;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: var(--text-color-muted, #9aa4b2);
+            }
+            .color-entry {
+                display: flex;
+                gap: 6px;
+                align-items: center;
+            }
+            .color-entry input {
+                flex: 1 1 auto;
+                min-width: 0;
+                font-family: var(--font-sans, sans-serif);
+                font-size: 12px;
+                padding: 5px 8px;
+                border-radius: 7px;
+                border: 1px solid var(--border-color-default, #30363d);
+                background: var(--background-color-default, rgba(20, 22, 30, 0.85));
+                color: var(--text-color-default, #e6edf3);
+            }
+            .color-entry input::placeholder {
+                color: var(--text-color-muted, #6e7681);
+            }
+            .color-entry input.invalid {
+                border-color: var(--true-color-red, #f85149);
+            }
+            .color-entry button {
+                font-family: var(--font-sans, sans-serif);
+                font-size: 12px;
+                padding: 5px 12px;
+                border-radius: 7px;
+                border: 1px solid var(--border-color-default, #30363d);
+                background: var(--background-color-default, rgba(20, 22, 30, 0.85));
+                color: var(--text-color-default, #e6edf3);
+                cursor: pointer;
+            }
+            .color-entry button:hover {
+                border-color: var(--color-focus-outline, #58a6ff);
+            }
+            .disabled {
+                opacity: 0.4;
+                pointer-events: none;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="stage"></canvas>
+        <div id="hud">
+            <div id="activity">Idle</div>
+            <div id="tool"></div>
+        </div>
+
+        <button id="gear" title="Visualizer settings" aria-label="Settings">⚙</button>
+        <div id="settings" role="dialog" aria-label="Visualizer settings">
+            <h2>Visualizer</h2>
+
+            <div class="row toggle">
+                <label for="s-spectrum">Spectrum bars</label>
+                <input type="checkbox" id="s-spectrum" />
+            </div>
+
+            <div class="row">
+                <div class="label"><span>Bar count</span><input type="number" class="numval" id="s-barcount-num" min="8" max="256" step="1" /></div>
+                <input type="range" id="s-barcount" min="8" max="256" step="1" />
+            </div>
+
+            <div class="row toggle">
+                <label for="s-oscilloscope">Oscilloscope</label>
+                <input type="checkbox" id="s-oscilloscope" />
+            </div>
+
+            <div class="row" id="s-oscthickness-row">
+                <div class="label"><span>Osc. thickness</span><input type="number" class="numval" id="s-oscthickness-num" min="0.5" max="8" step="0.5" /></div>
+                <input type="range" id="s-oscthickness" min="0.5" max="8" step="0.5" />
+            </div>
+
+            <div class="row">
+                <div class="label"><span>Color mode</span></div>
+                <select id="s-huemode">
+                    <option value="activity">Activity-driven</option>
+                    <option value="fixed">Fixed hue</option>
+                </select>
+            </div>
+
+            <div class="row colorpick" id="s-color-row">
+                <div class="label">
+                    <span>Pick a color</span>
+                    <span id="swatch"></span>
+                </div>
+                <canvas id="wheel" width="212" height="188"></canvas>
+                <div class="subhead">Or enter a color</div>
+                <div class="color-entry">
+                    <input
+                        type="text"
+                        id="s-colorinput"
+                        placeholder="Color value"
+                        spellcheck="false"
+                        autocomplete="off"
+                    />
+                    <button id="s-colorok" type="button">OK</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="controls">
+            <button data-activity="reasoning" data-boost="0.6">Think</button>
+            <button data-activity="tool" data-boost="0.8" data-tool="demo">Tool</button>
+            <button data-activity="streaming" data-boost="0.5">Stream</button>
+            <button data-activity="idle" data-boost="-1">Calm</button>
+        </div>
+
+        <script type="module">
+            import {
+                decay,
+                computeBars,
+                activityColor,
+                defaultSettings,
+                normalizeSettings,
+                resolveBaseHue,
+                hexWheelCells,
+                nearestCell,
+                parseColorInput,
+                coerceNumericSetting,
+            } from "./viz-core.mjs";
+
+            const PEAK_FALL = 0.6; // peak-cap fall speed (units/sec)
+
+            const canvas = document.getElementById("stage");
+            const ctx = canvas.getContext("2d");
+            const activityEl = document.getElementById("activity");
+            const toolEl = document.getElementById("tool");
+
+            // Display preferences. Authoritative copy lives in the shell; we hold a
+            // local mirror, hydrate it from GET /settings on load, and keep it in
+            // sync via the named "settings" SSE event.
+            let settings = defaultSettings();
+
+            // Local mirror of the shell's VizState. We relax it every frame with
+            // the SAME pure `decay`, and re-sync to authoritative values on each
+            // Server-Sent-Event. Motion between events is fully local => smooth.
+            let state = {
+                energy: 0,
+                activity: "idle",
+                toolName: null,
+                beat: 0,
+                hue: activityColor("idle"),
+                lastEventAt: performance.now(),
+            };
+
+            // Falling peak caps, classic spectrum-analyzer style. Reallocated when
+            // the bar count changes.
+            let peaks = new Float64Array(settings.barCount);
+            let displayHue = state.hue;
+
+            // ---- sizing -------------------------------------------------------
+            let width = 0;
+            let height = 0;
+            let dpr = 1;
+            function resize() {
+                dpr = Math.min(window.devicePixelRatio || 1, 2);
+                width = window.innerWidth;
+                height = window.innerHeight;
+                canvas.width = Math.floor(width * dpr);
+                canvas.height = Math.floor(height * dpr);
+                canvas.style.width = width + "px";
+                canvas.style.height = height + "px";
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            }
+            window.addEventListener("resize", resize);
+            resize();
+
+            // ---- live state from the extension shell --------------------------
+            function applyState(msg) {
+                state = {
+                    energy: typeof msg.energy === "number" ? msg.energy : state.energy,
+                    activity: msg.activity || state.activity,
+                    toolName: msg.toolName ?? null,
+                    beat: msg.beat ?? state.beat,
+                    hue: typeof msg.hue === "number" ? msg.hue : state.hue,
+                    lastEventAt: performance.now(),
+                };
+            }
+
+            function connect() {
+                const es = new EventSource("/events");
+                es.onmessage = (e) => {
+                    let msg;
+                    try {
+                        msg = JSON.parse(e.data);
+                    } catch {
+                        return;
+                    }
+                    applyState(msg);
+                };
+                // Settings arrive on a dedicated named event so they never collide
+                // with the high-frequency default state frames.
+                es.addEventListener("settings", (e) => {
+                    let next;
+                    try {
+                        next = JSON.parse(e.data);
+                    } catch {
+                        return;
+                    }
+                    setSettings(next, { fromForm: false });
+                });
+                es.onerror = () => {
+                    // EventSource auto-reconnects using the server's retry hint.
+                };
+            }
+            connect();
+
+            // ---- settings panel ----------------------------------------------
+            const gear = document.getElementById("gear");
+            const panel = document.getElementById("settings");
+            const els = {
+                spectrum: document.getElementById("s-spectrum"),
+                barCount: document.getElementById("s-barcount"),
+                barCountNum: document.getElementById("s-barcount-num"),
+                oscilloscope: document.getElementById("s-oscilloscope"),
+                oscThickness: document.getElementById("s-oscthickness"),
+                oscThicknessRow: document.getElementById("s-oscthickness-row"),
+                oscThicknessNum: document.getElementById("s-oscthickness-num"),
+                hueMode: document.getElementById("s-huemode"),
+                wheel: document.getElementById("wheel"),
+                colorInput: document.getElementById("s-colorinput"),
+                colorOk: document.getElementById("s-colorok"),
+                swatch: document.getElementById("swatch"),
+            };
+
+            gear.addEventListener("click", () => {
+                const open = panel.classList.toggle("open");
+                gear.classList.toggle("open", open);
+            });
+
+            // Reflect the current `settings` object onto the form controls.
+            function syncForm() {
+                els.spectrum.checked = settings.showSpectrum;
+                els.barCount.value = String(settings.barCount);
+                els.barCountNum.value = String(settings.barCount);
+                els.barCountNum.classList.remove("invalid");
+                els.oscilloscope.checked = settings.showOscilloscope;
+                els.oscThickness.value = String(settings.oscThickness);
+                els.oscThicknessNum.value = settings.oscThickness.toFixed(1);
+                els.oscThicknessNum.classList.remove("invalid");
+                els.hueMode.value = settings.hueMode;
+                els.swatch.style.background = `hsl(${settings.baseHue}, ${settings.saturation}%, 55%)`;
+                drawWheel();
+                // Thickness only matters when the oscilloscope is on.
+                els.oscThicknessRow.classList.toggle("disabled", !settings.showOscilloscope);
+            }
+
+            // Merge a patch into local settings (normalized) and refresh derived UI.
+            function setSettings(patch, { fromForm }) {
+                const prevBarCount = settings.barCount;
+                settings = normalizeSettings({ ...settings, ...patch });
+                if (settings.barCount !== prevBarCount) {
+                    peaks = new Float64Array(settings.barCount);
+                }
+                // When the change came from the network we own the form; when it
+                // came from the form we already have the right control values but
+                // still refresh labels / derived state.
+                syncForm();
+            }
+
+            // Persist a patch to the shell (debounced to release, not drag).
+            function persist(patch) {
+                fetch("/settings", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(patch),
+                }).catch(() => {});
+            }
+
+            // Wire a control: `input` applies locally (snappy, no network),
+            // `change` (release / commit) persists to the shell.
+            function wire(el, key, parse) {
+                el.addEventListener("input", () => {
+                    setSettings({ [key]: parse(el) }, { fromForm: true });
+                });
+                el.addEventListener("change", () => {
+                    persist({ [key]: parse(el) });
+                });
+            }
+
+            wire(els.spectrum, "showSpectrum", (el) => el.checked);
+            wire(els.barCount, "barCount", (el) => Number(el.value));
+            wire(els.oscilloscope, "showOscilloscope", (el) => el.checked);
+            wire(els.oscThickness, "oscThickness", (el) => Number(el.value));
+            wire(els.hueMode, "hueMode", (el) => el.value);
+
+            // Wire a typed numeric box: commit on change (blur / Enter / spinner)
+            // through the same clamp/snap rules as the slider. Invalid or empty
+            // input reverts to the current value; valid input applies + persists.
+            function wireNumber(el, key) {
+                const commit = () => {
+                    const v = coerceNumericSetting(key, el.value);
+                    if (v === null) {
+                        el.classList.add("invalid");
+                        syncForm();
+                        return;
+                    }
+                    setSettings({ [key]: v }, { fromForm: true });
+                    persist({ [key]: v });
+                };
+                el.addEventListener("change", commit);
+                el.addEventListener("keydown", (e) => {
+                    if (e.key === "Enter") {
+                        e.preventDefault();
+                        el.blur();
+                    }
+                });
+            }
+
+            wireNumber(els.barCountNum, "barCount");
+            wireNumber(els.oscThicknessNum, "oscThickness");
+
+            // ---- honeycomb color wheel ---------------------------------------
+            const WHEEL_W = 212;
+            const WHEEL_H = 188;
+            const RINGS = 6;
+            const wheelCells = hexWheelCells(RINGS);
+            const wctx = els.wheel.getContext("2d");
+            let wheelLayout = []; // [{ cell, cx, cy, rad }] in CSS pixels
+
+            function layoutWheel() {
+                const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                els.wheel.style.width = WHEEL_W + "px";
+                els.wheel.style.height = WHEEL_H + "px";
+                els.wheel.width = Math.round(WHEEL_W * dpr);
+                els.wheel.height = Math.round(WHEEL_H * dpr);
+                wctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                let maxX = 0;
+                let maxY = 0;
+                for (const c of wheelCells) {
+                    maxX = Math.max(maxX, Math.abs(c.x));
+                    maxY = Math.max(maxY, Math.abs(c.y));
+                }
+                const margin = 6;
+                const rad = Math.min(
+                    (WHEEL_W / 2 - margin) / (maxX + Math.sqrt(3) / 2),
+                    (WHEEL_H / 2 - margin) / (maxY + 1),
+                );
+                wheelLayout = wheelCells.map((cell) => ({
+                    cell,
+                    cx: WHEEL_W / 2 + cell.x * rad,
+                    cy: WHEEL_H / 2 + cell.y * rad,
+                    rad,
+                }));
+            }
+
+            function hexPath(cx, cy, rad) {
+                wctx.beginPath();
+                for (let k = 0; k < 6; k++) {
+                    const a = (Math.PI / 180) * (60 * k - 90);
+                    const x = cx + rad * Math.cos(a);
+                    const y = cy + rad * Math.sin(a);
+                    if (k === 0) wctx.moveTo(x, y);
+                    else wctx.lineTo(x, y);
+                }
+                wctx.closePath();
+            }
+
+            function drawWheel() {
+                if (!wheelLayout.length) layoutWheel();
+                wctx.clearRect(0, 0, WHEEL_W, WHEEL_H);
+                for (const o of wheelLayout) {
+                    const c = o.cell;
+                    const light = 50 + (1 - c.ring / RINGS) * 45;
+                    wctx.fillStyle = `hsl(${c.hue}, ${c.saturation}%, ${light}%)`;
+                    hexPath(o.cx, o.cy, o.rad * 0.92);
+                    wctx.fill();
+                }
+                const sel = nearestCell(wheelCells, settings.baseHue, settings.saturation);
+                if (sel) {
+                    const o = wheelLayout.find((o) => o.cell.q === sel.q && o.cell.r === sel.r);
+                    if (o) {
+                        hexPath(o.cx, o.cy, o.rad * 0.92);
+                        wctx.lineWidth = 2.5;
+                        wctx.strokeStyle = "#ffffff";
+                        wctx.stroke();
+                        hexPath(o.cx, o.cy, o.rad * 0.92);
+                        wctx.lineWidth = 1;
+                        wctx.strokeStyle = "rgba(0,0,0,0.65)";
+                        wctx.stroke();
+                    }
+                }
+            }
+
+            // Picking from the wheel (or typing a color) sets a fixed hue so the
+            // chosen color actually takes effect; the mode select can switch back
+            // to activity-driven hue while keeping the chosen saturation.
+            function applyColor(c) {
+                if (!c) return false;
+                const patch = { hueMode: "fixed", baseHue: c.baseHue, saturation: c.saturation };
+                setSettings(patch, { fromForm: true });
+                persist(patch);
+                return true;
+            }
+
+            els.wheel.addEventListener("click", (e) => {
+                const rect = els.wheel.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                let best = null;
+                let bd = Infinity;
+                for (const o of wheelLayout) {
+                    const dx = o.cx - mx;
+                    const dy = o.cy - my;
+                    const d = dx * dx + dy * dy;
+                    if (d < bd) {
+                        bd = d;
+                        best = o;
+                    }
+                }
+                if (best) applyColor({ baseHue: best.cell.hue, saturation: best.cell.saturation });
+            });
+
+            function submitColor() {
+                const c = parseColorInput(els.colorInput.value);
+                if (c) {
+                    els.colorInput.classList.remove("invalid");
+                    els.colorInput.value = "";
+                    applyColor(c);
+                } else {
+                    els.colorInput.classList.add("invalid");
+                }
+            }
+            els.colorOk.addEventListener("click", submitColor);
+            els.colorInput.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    submitColor();
+                }
+            });
+            els.colorInput.addEventListener("input", () => {
+                els.colorInput.classList.remove("invalid");
+            });
+            layoutWheel();
+
+            // Hydrate from the shell's persisted settings.
+            fetch("/settings")
+                .then((r) => r.json())
+                .then((s) => setSettings(s, { fromForm: false }))
+                .catch(() => syncForm());
+            syncForm();
+
+            // ---- labels -------------------------------------------------------
+            const LABELS = {
+                idle: "Idle",
+                reasoning: "Reasoning",
+                tool: "Running tool",
+                streaming: "Writing",
+                speaking: "Responding",
+            };
+            function updateHud() {
+                activityEl.textContent = LABELS[state.activity] || state.activity;
+                toolEl.textContent = state.toolName ? `▸ ${state.toolName}` : "";
+            }
+
+            // ---- render loop --------------------------------------------------
+            function hsla(h, s, l, a) {
+                return `hsla(${h}, ${s}%, ${l}%, ${a})`;
+            }
+
+            let lastFrame = performance.now();
+            function frame() {
+                const now = performance.now();
+                const dt = Math.min((now - lastFrame) / 1000, 0.1);
+                lastFrame = now;
+
+                // Smoothly relax local state toward calm between SSE syncs.
+                state = decay(state, now);
+
+                // Hue target depends on the chosen mode: a fixed base hue, or the
+                // live activity-driven hue. Ease toward it for smooth transitions.
+                const targetHue = resolveBaseHue(settings, state);
+                let dh = targetHue - displayHue;
+                // shortest path around the 360° wheel
+                if (dh > 180) dh -= 360;
+                else if (dh < -180) dh += 360;
+                displayHue = (displayHue + dh * 0.08 + 360) % 360;
+
+                const sat = settings.saturation;
+                const barCount = settings.barCount;
+                const bars = settings.showSpectrum ? computeBars(state, now, barCount) : null;
+
+                // background wash — darkens to near-black, tinted by activity.
+                const energy = state.energy;
+                const bg = ctx.createLinearGradient(0, 0, 0, height);
+                bg.addColorStop(0, hsla(displayHue, Math.min(sat, 60), 6 + energy * 6, 1));
+                bg.addColorStop(1, "rgba(4,5,9,1)");
+                ctx.fillStyle = bg;
+                ctx.fillRect(0, 0, width, height);
+
+                const baseline = height * 0.82;
+                const usable = height * 0.62;
+
+                if (settings.showSpectrum) {
+                    const gap = barCount > 160 ? 1 : 2;
+                    const barW = width / barCount;
+                    ctx.save();
+                    ctx.shadowBlur = 8 + energy * 26;
+                    for (let i = 0; i < barCount; i++) {
+                        const v = bars[i];
+                        const h = v * usable;
+                        const x = i * barW;
+                        const hue = displayHue + i * (66 / barCount);
+                        const light = 38 + v * 42;
+
+                        // peak cap physics
+                        peaks[i] = Math.max(peaks[i] - PEAK_FALL * dt, v);
+
+                        ctx.shadowColor = hsla(hue, sat, 55, 0.8);
+                        const grad = ctx.createLinearGradient(0, baseline - h, 0, baseline);
+                        grad.addColorStop(0, hsla(hue, Math.min(sat + 5, 100), light, 1));
+                        grad.addColorStop(1, hsla(hue, sat, 30, 0.95));
+                        ctx.fillStyle = grad;
+                        ctx.fillRect(x + gap / 2, baseline - h, barW - gap, h);
+
+                        // mirrored reflection below the baseline
+                        ctx.globalAlpha = 0.16;
+                        ctx.fillRect(x + gap / 2, baseline, barW - gap, h * 0.5);
+                        ctx.globalAlpha = 1;
+
+                        // falling peak cap
+                        const py = baseline - peaks[i] * usable;
+                        ctx.fillStyle = hsla(hue, Math.min(sat + 5, 100), 78, 0.95);
+                        ctx.fillRect(x + gap / 2, py - 2, barW - gap, 2);
+                    }
+                    ctx.restore();
+                }
+
+                if (settings.showOscilloscope) {
+                    // oscilloscope sweep across the upper third
+                    const oy = height * 0.3;
+                    const amp = height * 0.16 * (0.15 + energy);
+                    ctx.beginPath();
+                    for (let px = 0; px <= width; px += 6) {
+                        const u = px / width;
+                        const y =
+                            oy +
+                            Math.sin(u * 14 + now / 240) * amp * Math.sin(u * Math.PI) +
+                            Math.sin(u * 5 - now / 380) * amp * 0.4;
+                        if (px === 0) ctx.moveTo(px, y);
+                        else ctx.lineTo(px, y);
+                    }
+                    ctx.strokeStyle = hsla(displayHue + 40, sat, 70, 0.5 + energy * 0.4);
+                    ctx.lineWidth = settings.oscThickness + energy * 1.5;
+                    ctx.shadowBlur = 10 + energy * 20;
+                    ctx.shadowColor = hsla(displayHue + 40, sat, 65, 0.8);
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                }
+
+                updateHud();
+                requestAnimationFrame(frame);
+            }
+            requestAnimationFrame(frame);
+
+            // ---- manual controls (fetch the shell's /pulse endpoint) ----------
+            for (const btn of document.querySelectorAll("#controls button")) {
+                btn.addEventListener("click", () => {
+                    const q = new URLSearchParams({
+                        activity: btn.dataset.activity,
+                        boost: btn.dataset.boost,
+                    });
+                    if (btn.dataset.tool) q.set("toolName", btn.dataset.tool);
+                    fetch(`/pulse?${q.toString()}`, { method: "POST" }).catch(() => {});
+                });
+            }
+        </script>
+    </body>
+</html>

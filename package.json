@@ -1,0 +1,23 @@
+{
+    "name": "copilot-visualizer",
+    "version": "0.1.0",
+    "type": "module",
+    "main": "extension.mjs",
+    "license": "MIT",
+    "author": {
+        "email": "jtucker@codingfor.beer",
+        "name": "Jason Tucker",
+        "url": "https://codingfor.beer"
+    },
+    "scripts": {
+        "test": "node --test"
+    },
+    "dependencies": {
+        "@github/copilot-sdk": "latest"
+    },
+    "description": "A Winamp / Windows Media Player style spectrum + oscilloscope visualizer for the GitHub Copilot that animates in response to live agent activity.",
+    "keywords": [
+        "visualizer",
+        "spectrum-analyzer"
+    ]
+}

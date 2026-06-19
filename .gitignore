@@ -1,0 +1,25 @@
+# Runtime-written local state (user's saved visualizer settings).
+# Recreated automatically on first save — not source.
+artifacts/
+
+# Dependencies — none are needed (the Copilot CLI provides @github/copilot-sdk),
+# but ignore these in case a contributor runs `npm install`.
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-error.log*
+
+# Playwright MCP scratch output (screenshot capture, traces).
+.playwright-mcp/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
