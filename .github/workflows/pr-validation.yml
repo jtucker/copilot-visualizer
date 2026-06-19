@@ -1,0 +1,86 @@
+name: PR Validation
+
+# Trunk-based: every PR targeting main must pass tests + security scans before
+# it can merge. Versioning is driven by Conventional Commits (feat: -> minor,
+# fix: -> patch, feat!: / "BREAKING CHANGE" -> major); this workflow only
+# *previews* the next version, the Release workflow performs the actual bump.
+on:
+  pull_request:
+    branches: [main]
+
+# Read-only by default; the CodeQL job widens its own permissions.
+permissions:
+  contents: read
+
+# One in-flight run per PR; newer pushes cancel stale runs.
+concurrency:
+  group: pr-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run unit tests
+        run: node --test
+
+  codeql:
+    name: CodeQL (SAST)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript"
+
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  version-preview:
+    name: Version preview
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compute next version (dry run)
+        id: semver
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          release_branches: main
+          default_bump: false
+          dry_run: true
+      - name: Summarize next version
+        run: |
+          if [ -n "${{ steps.semver.outputs.new_version }}" ]; then
+            echo "### 📦 Next version (preview): \`v${{ steps.semver.outputs.new_version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### 📦 No version bump from these commits" >> "$GITHUB_STEP_SUMMARY"
+            echo "No \`feat:\` / \`fix:\` / \`feat!:\` commits found since the last release." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.semver.outputs.changelog }}" >> "$GITHUB_STEP_SUMMARY"
